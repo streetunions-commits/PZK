@@ -4,12 +4,39 @@ import tempfile
 from datetime import datetime
 from dataclasses import asdict
 
-from flask import Flask, render_template, request, redirect, url_for, flash, jsonify
+from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, session
 
 from parser import parse_ozon_bank_pdf, BankStatement, StatementHeader, StatementFooter, Transaction
 
 app = Flask(__name__)
-app.secret_key = os.urandom(24)
+app.secret_key = os.environ.get("SECRET_KEY", "pzk-secret-key-change-me")
+
+SITE_PASSWORD = os.environ.get("SITE_PASSWORD", "changeme")
+
+
+@app.before_request
+def require_login():
+    if request.endpoint in ("login",) or request.path.startswith("/static"):
+        return
+    if not session.get("authenticated"):
+        return redirect(url_for("login"))
+
+
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    if request.method == "POST":
+        password = request.form.get("password", "")
+        if password == SITE_PASSWORD:
+            session["authenticated"] = True
+            return redirect(url_for("index"))
+        flash("Неверный пароль")
+    return render_template("login.html")
+
+
+@app.route("/logout")
+def logout():
+    session.clear()
+    return redirect(url_for("login"))
 
 ALLOWED_EXTENSIONS = {"pdf"}
 DATA_DIR = os.path.dirname(__file__)
