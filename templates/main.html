@@ -1,0 +1,1050 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Парсер выписки — Озон Банк</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f5f5f5;
+            color: #333;
+            padding: 24px;
+        }
+        .container { max-width: 1100px; margin: 0 auto; }
+
+        /* Header bar */
+        .top-bar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 24px;
+        }
+        .top-bar h1 {
+            font-size: 22px;
+            color: #005bff;
+        }
+        .top-bar .subtitle {
+            color: #888;
+            font-size: 14px;
+            margin-top: 2px;
+        }
+        .upload-btn {
+            background: #005bff;
+            color: #fff;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-size: 14px;
+            cursor: pointer;
+            transition: background 0.2s;
+            white-space: nowrap;
+        }
+        .upload-btn:hover { background: #0046cc; }
+        .history-btn {
+            background: #fff;
+            color: #005bff;
+            border: 1px solid #005bff;
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-size: 14px;
+            cursor: pointer;
+            transition: background 0.2s, color 0.2s;
+            white-space: nowrap;
+        }
+        .history-btn:hover {
+            background: #005bff;
+            color: #fff;
+        }
+        .top-bar-actions {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        input[type="file"] { display: none; }
+
+        /* History modal */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.4);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+        .modal-overlay.open {
+            display: flex;
+        }
+        .modal {
+            background: #fff;
+            border-radius: 12px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.18);
+            width: 560px;
+            max-width: 90vw;
+            max-height: 80vh;
+            display: flex;
+            flex-direction: column;
+        }
+        .modal-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 20px 24px 16px;
+            border-bottom: 1px solid #eee;
+        }
+        .modal-header h2 {
+            font-size: 18px;
+            color: #333;
+        }
+        .modal-close {
+            background: none;
+            border: none;
+            font-size: 22px;
+            color: #999;
+            cursor: pointer;
+            padding: 0 4px;
+            line-height: 1;
+        }
+        .modal-close:hover { color: #333; }
+        .modal-body {
+            padding: 16px 24px 24px;
+            overflow-y: auto;
+        }
+        .history-empty {
+            text-align: center;
+            color: #aaa;
+            padding: 32px 0;
+            font-size: 14px;
+        }
+        .history-list {
+            list-style: none;
+        }
+        .history-item {
+            display: flex;
+            gap: 16px;
+            padding: 14px 0;
+            border-bottom: 1px solid #f0f0f0;
+            align-items: flex-start;
+        }
+        .history-item:last-child { border-bottom: none; }
+        .hi-date {
+            min-width: 56px;
+            text-align: center;
+        }
+        .hi-day {
+            font-size: 24px;
+            font-weight: 700;
+            color: #005bff;
+            line-height: 1;
+        }
+        .hi-month {
+            font-size: 11px;
+            color: #888;
+            text-transform: uppercase;
+            margin-top: 2px;
+        }
+        .hi-info { flex: 1; }
+        .hi-filename {
+            font-weight: 600;
+            font-size: 14px;
+            color: #333;
+            word-break: break-all;
+        }
+        .hi-meta {
+            font-size: 12px;
+            color: #888;
+            margin-top: 4px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 4px 14px;
+        }
+        .hi-meta span { white-space: nowrap; }
+
+        /* Flash messages */
+        .flash {
+            background: #e8f5e9;
+            color: #2e7d32;
+            padding: 10px 16px;
+            border-radius: 6px;
+            margin-bottom: 16px;
+            font-size: 14px;
+        }
+
+        /* Empty state */
+        .empty-state {
+            text-align: center;
+            padding: 80px 20px;
+            color: #aaa;
+        }
+        .empty-state .icon { font-size: 48px; margin-bottom: 16px; }
+        .empty-state p { font-size: 16px; }
+        .empty-state .hint { font-size: 13px; margin-top: 8px; }
+
+        /* Info cards */
+        .info-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 12px;
+            margin-bottom: 24px;
+        }
+        .info-card {
+            background: #fff;
+            border-radius: 8px;
+            padding: 16px;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+        }
+        .info-card .label {
+            font-size: 12px;
+            color: #888;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 4px;
+        }
+        .info-card .value {
+            font-size: 16px;
+            font-weight: 600;
+        }
+
+        /* Date inputs */
+        .period-inputs {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            font-size: 14px;
+        }
+        .date-input {
+            font-family: inherit;
+            font-size: 13px;
+            font-weight: 600;
+            border: 1px solid #e0e0e0;
+            border-radius: 6px;
+            padding: 3px 6px;
+            color: #333;
+            background: #f8f8f8;
+            cursor: pointer;
+        }
+        .date-input:focus {
+            outline: none;
+            border-color: #005bff;
+            background: #fff;
+        }
+
+        /* Summary cards */
+        .summary {
+            display: flex;
+            gap: 16px;
+            margin-bottom: 24px;
+            flex-wrap: wrap;
+        }
+        .summary-card {
+            flex: 1;
+            min-width: 200px;
+            background: #fff;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+            text-align: center;
+        }
+        .summary-card .amount {
+            font-size: 22px;
+            font-weight: 700;
+        }
+        .summary-card .label { font-size: 13px; color: #888; margin-top: 4px; }
+        .credit { color: #0a8f3c; }
+        .debit { color: #d32f2f; }
+
+        /* Table */
+        .table-wrap {
+            background: #fff;
+            border-radius: 8px;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+            overflow-x: auto;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 14px;
+        }
+        th {
+            background: #f8f9fa;
+            padding: 12px 14px;
+            text-align: left;
+            font-weight: 600;
+            font-size: 12px;
+            text-transform: uppercase;
+            color: #666;
+            border-bottom: 2px solid #eee;
+            white-space: nowrap;
+        }
+        td {
+            padding: 10px 14px;
+            border-bottom: 1px solid #f0f0f0;
+        }
+        tr:hover { background: #fafbff; }
+        .amount-cell {
+            font-weight: 600;
+            white-space: nowrap;
+            text-align: right;
+        }
+        .amount-credit { color: #0a8f3c; }
+        .amount-debit { color: #d32f2f; }
+        .type-badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+        .badge-credit { background: #e8f5e9; color: #2e7d32; }
+        .badge-debit { background: #fce4ec; color: #c62828; }
+        .desc { max-width: 360px; word-break: break-word; }
+        .count-info {
+            font-size: 13px;
+            color: #888;
+            margin-bottom: 12px;
+        }
+        .comment-input {
+            width: 100%;
+            min-width: 150px;
+            border: 1px solid transparent;
+            background: transparent;
+            padding: 6px 8px;
+            border-radius: 4px;
+            font-size: 13px;
+            font-family: inherit;
+            color: #333;
+            transition: border-color 0.2s, background 0.2s;
+        }
+        .comment-input:hover {
+            border-color: #ddd;
+            background: #fafafa;
+        }
+        .comment-input:focus {
+            outline: none;
+            border-color: #005bff;
+            background: #fff;
+        }
+
+        /* Tags */
+        .tags-cell {
+            min-width: 180px;
+        }
+        .tags-wrap {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 4px;
+            align-items: center;
+        }
+        .tag {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 600;
+            white-space: nowrap;
+            cursor: default;
+        }
+        .tag .remove-tag {
+            cursor: pointer;
+            opacity: 0.5;
+            font-size: 13px;
+            line-height: 1;
+        }
+        .tag .remove-tag:hover { opacity: 1; }
+        .tag-add-wrap {
+            position: relative;
+            display: inline-block;
+        }
+        .tag-add-btn {
+            background: none;
+            border: 1px dashed #ccc;
+            border-radius: 12px;
+            padding: 2px 10px;
+            font-size: 11px;
+            color: #999;
+            cursor: pointer;
+            transition: border-color 0.2s, color 0.2s;
+        }
+        .tag-add-btn:hover {
+            border-color: #005bff;
+            color: #005bff;
+        }
+        .tag-dropdown {
+            display: none;
+            position: absolute;
+            top: 100%;
+            left: 0;
+            z-index: 100;
+            background: #fff;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+            min-width: 180px;
+            margin-top: 4px;
+            padding: 6px 0;
+        }
+        .tag-dropdown.open { display: block; }
+        .tag-dropdown-input {
+            width: calc(100% - 12px);
+            margin: 0 6px 4px;
+            padding: 6px 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 13px;
+            font-family: inherit;
+            outline: none;
+        }
+        .tag-dropdown-input:focus { border-color: #005bff; }
+        .tag-dropdown-list {
+            max-height: 150px;
+            overflow-y: auto;
+        }
+        .tag-dropdown-item {
+            padding: 6px 12px;
+            font-size: 13px;
+            cursor: pointer;
+        }
+        .tag-dropdown-item:hover { background: #f0f4ff; }
+        .tag-dropdown-create {
+            padding: 6px 12px;
+            font-size: 13px;
+            color: #005bff;
+            cursor: pointer;
+            border-top: 1px solid #eee;
+        }
+        .tag-dropdown-create:hover { background: #f0f4ff; }
+
+        /* Tag filter bar */
+        .filter-bar {
+            background: #fff;
+            border-radius: 8px;
+            padding: 14px 18px;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        .filter-bar .filter-label {
+            font-size: 13px;
+            color: #888;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+        .filter-tag {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 4px 12px;
+            border-radius: 14px;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            border: 2px solid transparent;
+            opacity: 0.5;
+            transition: opacity 0.2s, border-color 0.2s;
+        }
+        .filter-tag.active {
+            opacity: 1;
+            border-color: currentColor;
+        }
+        .filter-tag:hover { opacity: 0.85; }
+        .filter-clear {
+            font-size: 12px;
+            color: #005bff;
+            cursor: pointer;
+            margin-left: 4px;
+            white-space: nowrap;
+        }
+        .filter-clear:hover { text-decoration: underline; }
+
+        /* Filter summary */
+        .filter-summary {
+            display: none;
+            gap: 16px;
+            margin-bottom: 16px;
+            flex-wrap: wrap;
+        }
+        .filter-summary.visible {
+            display: flex;
+        }
+        .filter-summary-card {
+            flex: 1;
+            min-width: 160px;
+            background: #fff;
+            border: 2px solid #e8e8e8;
+            border-radius: 8px;
+            padding: 14px;
+            text-align: center;
+        }
+        .filter-summary-card .fs-amount {
+            font-size: 18px;
+            font-weight: 700;
+        }
+        .filter-summary-card .fs-label {
+            font-size: 12px;
+            color: #888;
+            margin-top: 2px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="top-bar">
+            <div>
+                <h1>Озон Банк — Выписка</h1>
+                {% if statement %}
+                <div class="subtitle">
+                    {{ statement.header.document_number }} от {{ statement.header.document_date }}
+                </div>
+                {% endif %}
+            </div>
+            <div class="top-bar-actions">
+                <button type="button" class="history-btn" id="historyBtn">История загрузок</button>
+                <form method="POST" action="/upload" enctype="multipart/form-data" id="uploadForm">
+                    <input type="file" name="file" id="fileInput" accept=".pdf">
+                    <button type="button" class="upload-btn" onclick="document.getElementById('fileInput').click()">
+                        Загрузить PDF
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        {% with messages = get_flashed_messages() %}
+        {% if messages %}
+        {% for msg in messages %}
+        <div class="flash">{{ msg }}</div>
+        {% endfor %}
+        {% endif %}
+        {% endwith %}
+
+        {% if statement %}
+        <div class="info-grid">
+            <div class="info-card">
+                <div class="label">Владелец</div>
+                <div class="value">{{ statement.header.owner }}</div>
+            </div>
+            <div class="info-card">
+                <div class="label">Номер счёта</div>
+                <div class="value">{{ statement.header.account_number }}</div>
+            </div>
+            <div class="info-card">
+                <div class="label">Период</div>
+                <div class="value period-inputs">
+                    <input type="date" id="dateFrom" class="date-input"> — <input type="date" id="dateTo" class="date-input">
+                </div>
+            </div>
+            <div class="info-card">
+                <div class="label">Валюта</div>
+                <div class="value">{{ statement.header.currency }}</div>
+            </div>
+        </div>
+
+        <div class="summary">
+            <div class="summary-card">
+                <div class="amount">{{ "{:,.2f}".format(statement.header.opening_balance).replace(",", " ") }} ₽</div>
+                <div class="label">Входящий остаток</div>
+            </div>
+            <div class="summary-card">
+                <div class="amount credit">+ {{ "{:,.2f}".format(statement.footer.total_credits).replace(",", " ") }} ₽</div>
+                <div class="label">Зачисления</div>
+            </div>
+            <div class="summary-card">
+                <div class="amount debit">- {{ "{:,.2f}".format(statement.footer.total_debits).replace(",", " ") }} ₽</div>
+                <div class="label">Списания</div>
+            </div>
+            <div class="summary-card">
+                <div class="amount">{{ "{:,.2f}".format(statement.footer.closing_balance).replace(",", " ") }} ₽</div>
+                <div class="label">Исходящий остаток</div>
+            </div>
+        </div>
+
+        <p class="count-info" id="countInfo">Операций: {{ statement.transactions | length }}</p>
+
+        <div class="filter-bar" id="filterBar" style="display:none">
+            <span class="filter-label">Фильтр по тегам:</span>
+            <div id="filterTags"></div>
+            <span class="filter-clear" id="filterClear">Сбросить</span>
+        </div>
+
+        <div class="filter-summary" id="filterSummary">
+            <div class="filter-summary-card">
+                <div class="fs-amount" id="fsCount">0</div>
+                <div class="fs-label">Операций</div>
+            </div>
+            <div class="filter-summary-card">
+                <div class="fs-amount credit" id="fsCredits">0 ₽</div>
+                <div class="fs-label">Зачисления</div>
+            </div>
+            <div class="filter-summary-card">
+                <div class="fs-amount debit" id="fsDebits">0 ₽</div>
+                <div class="fs-label">Списания</div>
+            </div>
+            <div class="filter-summary-card">
+                <div class="fs-amount" id="fsBalance">0 ₽</div>
+                <div class="fs-label">Итого</div>
+            </div>
+        </div>
+
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Дата</th>
+                        <th>Время</th>
+                        <th>Тип</th>
+                        <th>Документ</th>
+                        <th>Назначение платежа</th>
+                        <th>Сумма</th>
+                        <th>Комментарий</th>
+                        <th>Теги</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for t in statement.transactions %}
+                    <tr data-doc="{{ t.document }}" data-amount="{{ t.amount }}" data-credit="{{ t.is_credit | lower }}" data-date="{{ t.date }}">
+                        <td>{{ t.date }}</td>
+                        <td>{{ t.time }}</td>
+                        <td>
+                            {% if t.is_credit %}
+                            <span class="type-badge badge-credit">Зачисление</span>
+                            {% else %}
+                            <span class="type-badge badge-debit">Списание</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ t.document }}</td>
+                        <td class="desc">{{ t.description }}</td>
+                        <td class="amount-cell {% if t.is_credit %}amount-credit{% else %}amount-debit{% endif %}">
+                            {% if t.is_credit %}+{% else %}-{% endif %}
+                            {{ "{:,.2f}".format(t.amount).replace(",", " ") }} ₽
+                        </td>
+                        <td>
+                            <input type="text" class="comment-input" data-doc="{{ t.document }}" placeholder="—">
+                        </td>
+                        <td class="tags-cell">
+                            <div class="tags-wrap" data-doc="{{ t.document }}">
+                                <div class="tag-add-wrap">
+                                    <button type="button" class="tag-add-btn">+ тег</button>
+                                    <div class="tag-dropdown">
+                                        <input type="text" class="tag-dropdown-input" placeholder="Найти или создать...">
+                                        <div class="tag-dropdown-list"></div>
+                                        <div class="tag-dropdown-create" style="display:none"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        {% else %}
+        <div class="empty-state">
+            <div class="icon">📄</div>
+            <p>Загрузите PDF-выписку Озон Банка</p>
+            <div class="hint">Нажмите кнопку «Загрузить PDF» справа вверху</div>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- History modal -->
+    <div class="modal-overlay" id="historyModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h2>История загрузок</h2>
+                <button class="modal-close" id="historyClose">&times;</button>
+            </div>
+            <div class="modal-body" id="historyBody">
+                <div class="history-empty">Загрузка...</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.getElementById('fileInput').addEventListener('change', function() {
+            if (this.files.length) {
+                document.getElementById('uploadForm').submit();
+            }
+        });
+
+        // === История загрузок ===
+        const MONTHS_SHORT = ['янв','фев','мар','апр','май','июн','июл','авг','сен','окт','ноя','дек'];
+
+        const historyModal = document.getElementById('historyModal');
+        const historyBody = document.getElementById('historyBody');
+
+        document.getElementById('historyBtn').addEventListener('click', () => {
+            historyModal.classList.add('open');
+            historyBody.innerHTML = '<div class="history-empty">Загрузка...</div>';
+            fetch('/api/history')
+                .then(r => r.json())
+                .then(data => {
+                    if (!data.length) {
+                        historyBody.innerHTML = '<div class="history-empty">Загрузок пока нет</div>';
+                        return;
+                    }
+                    const ul = document.createElement('ul');
+                    ul.className = 'history-list';
+                    data.forEach(item => {
+                        // parse uploaded_at "dd.mm.yyyy HH:MM:SS"
+                        const parts = item.uploaded_at.split(' ');
+                        const dateParts = parts[0].split('.');
+                        const day = dateParts[0];
+                        const monthIdx = parseInt(dateParts[1], 10) - 1;
+                        const year = dateParts[2];
+                        const time = parts[1] || '';
+
+                        const li = document.createElement('li');
+                        li.className = 'history-item';
+                        li.innerHTML = `
+                            <div class="hi-date">
+                                <div class="hi-day">${day}</div>
+                                <div class="hi-month">${MONTHS_SHORT[monthIdx]} ${year}</div>
+                            </div>
+                            <div class="hi-info">
+                                <div class="hi-filename">${item.filename}</div>
+                                <div class="hi-meta">
+                                    <span>Загружено: ${parts[0]} в ${time}</span>
+                                    <span>Период: ${item.period_from} — ${item.period_to}</span>
+                                    <span>В файле: ${item.transactions_in_file || item.transactions || '?'}</span>
+                                    <span>Новых: ${item.new_added != null ? item.new_added : '?'}</span>
+                                </div>
+                            </div>
+                        `;
+                        ul.appendChild(li);
+                    });
+                    historyBody.innerHTML = '';
+                    historyBody.appendChild(ul);
+                });
+        });
+
+        document.getElementById('historyClose').addEventListener('click', () => {
+            historyModal.classList.remove('open');
+        });
+        historyModal.addEventListener('click', (e) => {
+            if (e.target === historyModal) historyModal.classList.remove('open');
+        });
+
+        // === Комментарии ===
+        const COMMENTS_KEY = 'ozon_bank_comments';
+
+        function loadComments() {
+            const saved = JSON.parse(localStorage.getItem(COMMENTS_KEY) || '{}');
+            document.querySelectorAll('.comment-input').forEach(input => {
+                const key = input.dataset.doc;
+                if (saved[key]) input.value = saved[key];
+            });
+        }
+        function saveComment(key, value) {
+            const saved = JSON.parse(localStorage.getItem(COMMENTS_KEY) || '{}');
+            if (value) { saved[key] = value; } else { delete saved[key]; }
+            localStorage.setItem(COMMENTS_KEY, JSON.stringify(saved));
+        }
+        document.querySelectorAll('.comment-input').forEach(input => {
+            input.addEventListener('input', () => saveComment(input.dataset.doc, input.value));
+        });
+        loadComments();
+
+        // === Теги ===
+        const TAGS_KEY = 'ozon_bank_tags';         // { docId: ["тег1", "тег2"] }
+        const ALL_TAGS_KEY = 'ozon_bank_all_tags';  // ["тег1", "тег2", ...]
+
+        const TAG_COLORS = [
+            { bg: '#e3f2fd', color: '#1565c0' },
+            { bg: '#f3e5f5', color: '#7b1fa2' },
+            { bg: '#fff3e0', color: '#e65100' },
+            { bg: '#e8f5e9', color: '#2e7d32' },
+            { bg: '#fce4ec', color: '#c62828' },
+            { bg: '#e0f7fa', color: '#00695c' },
+            { bg: '#fff9c4', color: '#f57f17' },
+            { bg: '#f1f8e9', color: '#558b2f' },
+        ];
+
+        function getTagColor(tag) {
+            let hash = 0;
+            for (let i = 0; i < tag.length; i++) hash = tag.charCodeAt(i) + ((hash << 5) - hash);
+            return TAG_COLORS[Math.abs(hash) % TAG_COLORS.length];
+        }
+
+        function getAllTags() {
+            return JSON.parse(localStorage.getItem(ALL_TAGS_KEY) || '[]');
+        }
+        function saveAllTags(tags) {
+            localStorage.setItem(ALL_TAGS_KEY, JSON.stringify([...new Set(tags)]));
+        }
+        function getDocTags(docId) {
+            const saved = JSON.parse(localStorage.getItem(TAGS_KEY) || '{}');
+            return saved[docId] || [];
+        }
+        function saveDocTags(docId, tags) {
+            const saved = JSON.parse(localStorage.getItem(TAGS_KEY) || '{}');
+            if (tags.length) { saved[docId] = tags; } else { delete saved[docId]; }
+            localStorage.setItem(TAGS_KEY, JSON.stringify(saved));
+        }
+
+        function renderTags(wrap) {
+            const docId = wrap.dataset.doc;
+            const tags = getDocTags(docId);
+            // Remove existing tag elements (keep the add-wrap)
+            wrap.querySelectorAll('.tag').forEach(el => el.remove());
+            const addWrap = wrap.querySelector('.tag-add-wrap');
+            tags.forEach(tag => {
+                const c = getTagColor(tag);
+                const el = document.createElement('span');
+                el.className = 'tag';
+                el.style.background = c.bg;
+                el.style.color = c.color;
+                el.innerHTML = `${tag}<span class="remove-tag">&times;</span>`;
+                el.querySelector('.remove-tag').addEventListener('click', () => {
+                    const updated = getDocTags(docId).filter(t => t !== tag);
+                    saveDocTags(docId, updated);
+                    renderTags(wrap);
+                    if (typeof buildFilterBar === 'function') { buildFilterBar(); applyFilter(); }
+                });
+                wrap.insertBefore(el, addWrap);
+            });
+        }
+
+        function addTagToDoc(wrap, tag) {
+            const docId = wrap.dataset.doc;
+            const tags = getDocTags(docId);
+            if (tags.includes(tag)) return;
+            tags.push(tag);
+            saveDocTags(docId, tags);
+            // Ensure tag is in global list
+            const all = getAllTags();
+            if (!all.includes(tag)) { all.push(tag); saveAllTags(all); }
+            renderTags(wrap);
+        }
+
+        function renderDropdown(dropdown, wrap, filter) {
+            const docId = wrap.dataset.doc;
+            const currentTags = getDocTags(docId);
+            const allTags = getAllTags().filter(t => !currentTags.includes(t));
+            const filtered = filter ? allTags.filter(t => t.toLowerCase().includes(filter.toLowerCase())) : allTags;
+            const list = dropdown.querySelector('.tag-dropdown-list');
+            const createEl = dropdown.querySelector('.tag-dropdown-create');
+
+            list.innerHTML = '';
+            filtered.forEach(tag => {
+                const item = document.createElement('div');
+                item.className = 'tag-dropdown-item';
+                const c = getTagColor(tag);
+                item.innerHTML = `<span class="tag" style="background:${c.bg};color:${c.color}">${tag}</span>`;
+                item.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    addTagToDoc(wrap, tag);
+                    closeAllDropdowns();
+                });
+                list.appendChild(item);
+            });
+
+            const trimmed = (filter || '').trim();
+            const allTagsList = getAllTags();
+            if (trimmed && !allTagsList.includes(trimmed)) {
+                createEl.style.display = '';
+                createEl.textContent = `Создать «${trimmed}»`;
+                createEl.onclick = (e) => {
+                    e.stopPropagation();
+                    addTagToDoc(wrap, trimmed);
+                    closeAllDropdowns();
+                };
+            } else {
+                createEl.style.display = 'none';
+            }
+        }
+
+        function closeAllDropdowns() {
+            document.querySelectorAll('.tag-dropdown').forEach(d => {
+                d.classList.remove('open');
+                d.querySelector('.tag-dropdown-input').value = '';
+            });
+        }
+
+        // Init dropdowns
+        document.querySelectorAll('.tags-wrap').forEach(wrap => {
+            const addBtn = wrap.querySelector('.tag-add-btn');
+            const dropdown = wrap.querySelector('.tag-dropdown');
+            const input = dropdown.querySelector('.tag-dropdown-input');
+
+            addBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const wasOpen = dropdown.classList.contains('open');
+                closeAllDropdowns();
+                if (!wasOpen) {
+                    dropdown.classList.add('open');
+                    renderDropdown(dropdown, wrap, '');
+                    input.focus();
+                }
+            });
+
+            input.addEventListener('input', () => {
+                renderDropdown(dropdown, wrap, input.value);
+            });
+
+            input.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    const val = input.value.trim();
+                    if (val) {
+                        addTagToDoc(wrap, val);
+                        closeAllDropdowns();
+                    }
+                }
+                if (e.key === 'Escape') closeAllDropdowns();
+            });
+
+            input.addEventListener('click', (e) => e.stopPropagation());
+            dropdown.addEventListener('click', (e) => e.stopPropagation());
+
+            renderTags(wrap);
+        });
+
+        document.addEventListener('click', closeAllDropdowns);
+
+        // === Фильтр по дате ===
+        // Конвертация dd.mm.yyyy -> yyyy-mm-dd
+        function dmyToIso(dmy) {
+            const parts = dmy.split('.');
+            if (parts.length !== 3) return '';
+            return `${parts[2]}-${parts[1]}-${parts[0]}`;
+        }
+
+        const dateFromEl = document.getElementById('dateFrom');
+        const dateToEl = document.getElementById('dateTo');
+
+        if (dateFromEl && dateToEl) {
+            {% if statement %}
+            dateFromEl.value = dmyToIso('{{ statement.header.period_from }}');
+            dateToEl.value = dmyToIso('{{ statement.header.period_to }}');
+            {% endif %}
+            dateFromEl.addEventListener('change', applyFilter);
+            dateToEl.addEventListener('change', applyFilter);
+        }
+
+        // Проверка даты строки (dd.mm.yyyy) в диапазон (yyyy-mm-dd)
+        function isDateInRange(dmyDate) {
+            const iso = dmyToIso(dmyDate);
+            if (!iso) return true;
+            const from = dateFromEl ? dateFromEl.value : '';
+            const to = dateToEl ? dateToEl.value : '';
+            if (from && iso < from) return false;
+            if (to && iso > to) return false;
+            return true;
+        }
+
+        // === Фильтр по тегам ===
+        let activeFilterTags = new Set();
+
+        function formatMoney(n) {
+            return n.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ' ') + ' ₽';
+        }
+
+        function buildFilterBar() {
+            const allTags = getAllTags();
+            const filterBar = document.getElementById('filterBar');
+            const filterTagsEl = document.getElementById('filterTags');
+            if (!allTags.length) {
+                filterBar.style.display = 'none';
+                return;
+            }
+            filterBar.style.display = '';
+            filterTagsEl.innerHTML = '';
+            allTags.forEach(tag => {
+                const c = getTagColor(tag);
+                const el = document.createElement('span');
+                el.className = 'filter-tag' + (activeFilterTags.has(tag) ? ' active' : '');
+                el.style.background = c.bg;
+                el.style.color = c.color;
+                el.textContent = tag;
+                el.addEventListener('click', () => {
+                    if (activeFilterTags.has(tag)) {
+                        activeFilterTags.delete(tag);
+                    } else {
+                        activeFilterTags.add(tag);
+                    }
+                    buildFilterBar();
+                    applyFilter();
+                });
+                filterTagsEl.appendChild(el);
+            });
+        }
+
+        function applyFilter() {
+            const rows = document.querySelectorAll('tbody tr[data-doc]');
+            const hasTagFilter = activeFilterTags.size > 0;
+            const summaryEl = document.getElementById('filterSummary');
+            const countEl = document.getElementById('countInfo');
+            const totalRows = rows.length;
+
+            let visibleCount = 0;
+            let credits = 0;
+            let debits = 0;
+
+            rows.forEach(row => {
+                const docId = row.dataset.doc;
+                const amount = parseFloat(row.dataset.amount) || 0;
+                const isCredit = row.dataset.credit === 'true';
+                const rowTags = getDocTags(docId);
+                const rowDate = row.dataset.date;
+
+                // Date filter
+                const dateOk = isDateInRange(rowDate);
+
+                // Tag filter
+                const tagOk = !hasTagFilter || [...activeFilterTags].some(t => rowTags.includes(t));
+
+                const visible = dateOk && tagOk;
+                row.style.display = visible ? '' : 'none';
+                if (visible) {
+                    visibleCount++;
+                    if (isCredit) credits += amount; else debits += amount;
+                }
+            });
+
+            const hasAnyFilter = hasTagFilter || visibleCount !== totalRows;
+
+            if (hasAnyFilter) {
+                summaryEl.classList.add('visible');
+                document.getElementById('fsCount').textContent = visibleCount;
+                document.getElementById('fsCredits').textContent = '+ ' + formatMoney(credits);
+                document.getElementById('fsDebits').textContent = '- ' + formatMoney(debits);
+                const balance = credits - debits;
+                const balEl = document.getElementById('fsBalance');
+                balEl.textContent = (balance >= 0 ? '+ ' : '- ') + formatMoney(Math.abs(balance));
+                balEl.className = 'fs-amount ' + (balance >= 0 ? 'credit' : 'debit');
+                countEl.textContent = `Показано операций: ${visibleCount} из ${totalRows}`;
+            } else {
+                summaryEl.classList.remove('visible');
+                countEl.textContent = `Операций: ${totalRows}`;
+            }
+        }
+
+        document.getElementById('filterClear').addEventListener('click', () => {
+            activeFilterTags.clear();
+            {% if statement %}
+            if (dateFromEl) dateFromEl.value = dmyToIso('{{ statement.header.period_from }}');
+            if (dateToEl) dateToEl.value = dmyToIso('{{ statement.header.period_to }}');
+            {% endif %}
+            buildFilterBar();
+            applyFilter();
+        });
+
+        // Перестроить фильтр-бар при изменении тегов
+        const _origAddTagToDoc = addTagToDoc;
+        addTagToDoc = function(wrap, tag) {
+            _origAddTagToDoc(wrap, tag);
+            buildFilterBar();
+            applyFilter();
+        };
+
+        buildFilterBar();
+    </script>
+</body>
+</html>

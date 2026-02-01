@@ -1,0 +1,22 @@
+__pycache__/
+*.pyc
+*.pyo
+
+# Sensitive data
+transactions_store.json
+upload_history.json
+*.pdf
+
+# Environment
+.env
+venv/
+.venv/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+nul
+Thumbs.db
+.DS_Store
