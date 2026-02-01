@@ -42,6 +42,8 @@ ALLOWED_EXTENSIONS = {"pdf"}
 DATA_DIR = os.path.dirname(__file__)
 HISTORY_FILE = os.path.join(DATA_DIR, "upload_history.json")
 STORE_FILE = os.path.join(DATA_DIR, "transactions_store.json")
+COMMENTS_FILE = os.path.join(DATA_DIR, "comments.json")
+TAGS_FILE = os.path.join(DATA_DIR, "tags.json")
 
 
 def allowed_file(filename: str) -> bool:
@@ -234,6 +236,77 @@ def upload():
 @app.route("/api/history", methods=["GET"])
 def api_history():
     return jsonify(load_history())
+
+
+# === Комментарии (серверное хранилище) ===
+
+def load_comments() -> dict:
+    if os.path.exists(COMMENTS_FILE):
+        with open(COMMENTS_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    return {}
+
+
+def save_comments(data: dict):
+    with open(COMMENTS_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
+
+@app.route("/api/comments", methods=["GET"])
+def api_get_comments():
+    return jsonify(load_comments())
+
+
+@app.route("/api/comments", methods=["POST"])
+def api_save_comment():
+    body = request.get_json(force=True)
+    doc_id = body.get("doc_id", "")
+    comment = body.get("comment", "")
+    comments = load_comments()
+    if comment:
+        comments[doc_id] = comment
+    else:
+        comments.pop(doc_id, None)
+    save_comments(comments)
+    return jsonify({"ok": True})
+
+
+# === Теги (серверное хранилище) ===
+
+def load_tags() -> dict:
+    if os.path.exists(TAGS_FILE):
+        with open(TAGS_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    return {"doc_tags": {}, "all_tags": []}
+
+
+def save_tags(data: dict):
+    with open(TAGS_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
+
+@app.route("/api/tags", methods=["GET"])
+def api_get_tags():
+    return jsonify(load_tags())
+
+
+@app.route("/api/tags", methods=["POST"])
+def api_save_tags():
+    body = request.get_json(force=True)
+    doc_id = body.get("doc_id", "")
+    tags = body.get("tags", [])
+    data = load_tags()
+    if tags:
+        data["doc_tags"][doc_id] = tags
+    else:
+        data["doc_tags"].pop(doc_id, None)
+    # Update all_tags list
+    all_tags = set(data.get("all_tags", []))
+    for tag_list in data["doc_tags"].values():
+        all_tags.update(tag_list)
+    data["all_tags"] = sorted(all_tags)
+    save_tags(data)
+    return jsonify({"ok": True})
 
 
 if __name__ == "__main__":

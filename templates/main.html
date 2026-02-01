@@ -849,29 +849,56 @@
             if (e.target === historyModal) historyModal.classList.remove('open');
         });
 
-        // === Комментарии ===
-        const COMMENTS_KEY = 'ozon_bank_comments';
+        // === Комментарии (серверное хранилище) ===
+        let _commentsCache = {};
 
-        function loadComments() {
-            const saved = JSON.parse(localStorage.getItem(COMMENTS_KEY) || '{}');
+        async function loadComments() {
+            try {
+                const resp = await fetch('/api/comments');
+                _commentsCache = await resp.json();
+            } catch(e) { _commentsCache = {}; }
             document.querySelectorAll('.comment-input').forEach(input => {
                 const key = input.dataset.doc;
-                if (saved[key]) input.value = saved[key];
+                if (_commentsCache[key]) input.value = _commentsCache[key];
             });
         }
+
+        let _commentTimers = {};
         function saveComment(key, value) {
-            const saved = JSON.parse(localStorage.getItem(COMMENTS_KEY) || '{}');
-            if (value) { saved[key] = value; } else { delete saved[key]; }
-            localStorage.setItem(COMMENTS_KEY, JSON.stringify(saved));
+            _commentsCache[key] = value;
+            if (_commentTimers[key]) clearTimeout(_commentTimers[key]);
+            _commentTimers[key] = setTimeout(() => {
+                fetch('/api/comments', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({doc_id: key, comment: value})
+                });
+            }, 500);
         }
         document.querySelectorAll('.comment-input').forEach(input => {
             input.addEventListener('input', () => saveComment(input.dataset.doc, input.value));
         });
         loadComments();
 
-        // === Теги ===
-        const TAGS_KEY = 'ozon_bank_tags';         // { docId: ["тег1", "тег2"] }
-        const ALL_TAGS_KEY = 'ozon_bank_all_tags';  // ["тег1", "тег2", ...]
+        // === Теги (серверное хранилище) ===
+        let _tagsCache = {doc_tags: {}, all_tags: []};
+
+        async function loadTagsFromServer() {
+            try {
+                const resp = await fetch('/api/tags');
+                _tagsCache = await resp.json();
+            } catch(e) { _tagsCache = {doc_tags: {}, all_tags: []}; }
+        }
+
+        function saveTagsToServer(docId, tags) {
+            fetch('/api/tags', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({doc_id: docId, tags: tags})
+            }).then(r => r.json()).then(data => {
+                // Server returns ok, refresh all_tags from cache
+            });
+        }
 
         const TAG_COLORS = [
             { bg: '#e3f2fd', color: '#1565c0' },
@@ -891,19 +918,23 @@
         }
 
         function getAllTags() {
-            return JSON.parse(localStorage.getItem(ALL_TAGS_KEY) || '[]');
-        }
-        function saveAllTags(tags) {
-            localStorage.setItem(ALL_TAGS_KEY, JSON.stringify([...new Set(tags)]));
+            return _tagsCache.all_tags || [];
         }
         function getDocTags(docId) {
-            const saved = JSON.parse(localStorage.getItem(TAGS_KEY) || '{}');
-            return saved[docId] || [];
+            return (_tagsCache.doc_tags && _tagsCache.doc_tags[docId]) || [];
         }
         function saveDocTags(docId, tags) {
-            const saved = JSON.parse(localStorage.getItem(TAGS_KEY) || '{}');
-            if (tags.length) { saved[docId] = tags; } else { delete saved[docId]; }
-            localStorage.setItem(TAGS_KEY, JSON.stringify(saved));
+            if (!_tagsCache.doc_tags) _tagsCache.doc_tags = {};
+            if (tags.length) {
+                _tagsCache.doc_tags[docId] = tags;
+            } else {
+                delete _tagsCache.doc_tags[docId];
+            }
+            // Update all_tags cache
+            const allSet = new Set();
+            Object.values(_tagsCache.doc_tags).forEach(tl => tl.forEach(t => allSet.add(t)));
+            _tagsCache.all_tags = [...allSet].sort();
+            saveTagsToServer(docId, tags);
         }
 
         function renderTags(wrap) {
@@ -935,9 +966,6 @@
             if (tags.includes(tag)) return;
             tags.push(tag);
             saveDocTags(docId, tags);
-            // Ensure tag is in global list
-            const all = getAllTags();
-            if (!all.includes(tag)) { all.push(tag); saveAllTags(all); }
             renderTags(wrap);
         }
 
@@ -986,45 +1014,53 @@
         }
 
         // Init dropdowns
-        document.querySelectorAll('.tags-wrap').forEach(wrap => {
-            const addBtn = wrap.querySelector('.tag-add-btn');
-            const dropdown = wrap.querySelector('.tag-dropdown');
-            const input = dropdown.querySelector('.tag-dropdown-input');
+        function initTagDropdowns() {
+            document.querySelectorAll('.tags-wrap').forEach(wrap => {
+                const addBtn = wrap.querySelector('.tag-add-btn');
+                const dropdown = wrap.querySelector('.tag-dropdown');
+                const input = dropdown.querySelector('.tag-dropdown-input');
 
-            addBtn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                const wasOpen = dropdown.classList.contains('open');
-                closeAllDropdowns();
-                if (!wasOpen) {
-                    dropdown.classList.add('open');
-                    renderDropdown(dropdown, wrap, '');
-                    input.focus();
-                }
-            });
-
-            input.addEventListener('input', () => {
-                renderDropdown(dropdown, wrap, input.value);
-            });
-
-            input.addEventListener('keydown', (e) => {
-                if (e.key === 'Enter') {
-                    e.preventDefault();
-                    const val = input.value.trim();
-                    if (val) {
-                        addTagToDoc(wrap, val);
-                        closeAllDropdowns();
+                addBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const wasOpen = dropdown.classList.contains('open');
+                    closeAllDropdowns();
+                    if (!wasOpen) {
+                        dropdown.classList.add('open');
+                        renderDropdown(dropdown, wrap, '');
+                        input.focus();
                     }
-                }
-                if (e.key === 'Escape') closeAllDropdowns();
+                });
+
+                input.addEventListener('input', () => {
+                    renderDropdown(dropdown, wrap, input.value);
+                });
+
+                input.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        const val = input.value.trim();
+                        if (val) {
+                            addTagToDoc(wrap, val);
+                            closeAllDropdowns();
+                        }
+                    }
+                    if (e.key === 'Escape') closeAllDropdowns();
+                });
+
+                input.addEventListener('click', (e) => e.stopPropagation());
+                dropdown.addEventListener('click', (e) => e.stopPropagation());
+
+                renderTags(wrap);
             });
-
-            input.addEventListener('click', (e) => e.stopPropagation());
-            dropdown.addEventListener('click', (e) => e.stopPropagation());
-
-            renderTags(wrap);
-        });
+        }
 
         document.addEventListener('click', closeAllDropdowns);
+
+        // Load tags from server, then init UI
+        loadTagsFromServer().then(() => {
+            initTagDropdowns();
+            buildFilterBar();
+        });
 
         // === Фильтр по дате ===
         // Конвертация dd.mm.yyyy -> yyyy-mm-dd
@@ -1167,8 +1203,6 @@
             buildFilterBar();
             applyFilter();
         };
-
-        buildFilterBar();
     </script>
 </body>
 </html>
