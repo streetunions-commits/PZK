@@ -3,9 +3,9 @@ __pycache__/
 *.pyo
 
 # Sensitive data
-transactions_store.json
-upload_history.json
-*.pdf
+# transactions_store.json
+# upload_history.json
+# *.pdf
 
 # Environment
 .env
