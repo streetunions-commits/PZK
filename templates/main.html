@@ -548,7 +548,7 @@
 
             /* Filter summary: 2 columns */
             .filter-summary {
-                display: grid;
+                display: none;
                 grid-template-columns: repeat(2, 1fr);
                 gap: 8px;
             }
@@ -599,7 +599,7 @@
             }
 
             /* Filter summary: single column */
-            .filter-summary, .filter-summary.visible {
+            .filter-summary.visible {
                 grid-template-columns: 1fr;
             }
 
@@ -1126,9 +1126,7 @@
                 }
             });
 
-            const hasAnyFilter = hasTagFilter || visibleCount !== totalRows;
-
-            if (hasAnyFilter) {
+            if (hasTagFilter) {
                 summaryEl.classList.add('visible');
                 document.getElementById('fsCount').textContent = visibleCount;
                 document.getElementById('fsCredits').textContent = '+ ' + formatMoney(credits);
@@ -1140,7 +1138,15 @@
                 countEl.textContent = `Показано операций: ${visibleCount} из ${totalRows}`;
             } else {
                 summaryEl.classList.remove('visible');
-                countEl.textContent = `Операций: ${totalRows}`;
+                document.getElementById('fsCount').textContent = '0';
+                document.getElementById('fsCredits').textContent = '0 ₽';
+                document.getElementById('fsDebits').textContent = '0 ₽';
+                document.getElementById('fsBalance').textContent = '0 ₽';
+                if (visibleCount !== totalRows) {
+                    countEl.textContent = `Показано операций: ${visibleCount} из ${totalRows}`;
+                } else {
+                    countEl.textContent = `Операций: ${totalRows}`;
+                }
             }
         }
 
