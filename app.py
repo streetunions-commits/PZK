@@ -87,6 +87,30 @@ def dmy_to_sortable(dmy: str) -> str:
     return f"{parts[2]}-{parts[1]}-{parts[0]}"
 
 
+def auto_tag_transactions(store: dict):
+    """Автоматически проставляет теги на основе описания транзакций."""
+    tags_data = load_tags()
+    doc_tags = tags_data.get("doc_tags", {})
+    changed = False
+
+    for doc_id, txn in store.get("transactions", {}).items():
+        desc = txn.get("description", "")
+        # Автотег Boosty для поступлений с "Boosty" в описании
+        if txn.get("is_credit") and "boosty" in desc.lower():
+            current_tags = doc_tags.get(doc_id, [])
+            if "Boosty" not in current_tags:
+                doc_tags[doc_id] = current_tags + ["Boosty"]
+                changed = True
+
+    if changed:
+        tags_data["doc_tags"] = doc_tags
+        all_tags = set(tags_data.get("all_tags", []))
+        for tag_list in doc_tags.values():
+            all_tags.update(tag_list)
+        tags_data["all_tags"] = sorted(all_tags)
+        save_tags(tags_data)
+
+
 def merge_statement(store: dict, statement: BankStatement) -> tuple[dict, int]:
     """Мержит новую выписку в хранилище. Возвращает (store, кол-во новых транзакций)."""
     # Обновляем header — расширяем период
@@ -204,6 +228,9 @@ def upload():
         store = load_store()
         store, new_count = merge_statement(store, parsed)
         save_store(store)
+
+        # Автоматически проставляем теги по описанию
+        auto_tag_transactions(store)
 
         total = len(store["transactions"])
         if new_count > 0:
