@@ -491,6 +491,128 @@
             color: #888;
             margin-top: 2px;
         }
+
+        /* === Mobile responsive === */
+        @media (max-width: 768px) {
+            body { padding: 12px; }
+
+            /* Top bar: stack vertically */
+            .top-bar {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 12px;
+            }
+            .top-bar h1 { font-size: 18px; }
+            .top-bar-actions {
+                width: 100%;
+                justify-content: stretch;
+            }
+            .top-bar-actions .history-btn,
+            .top-bar-actions .upload-btn {
+                flex: 1;
+                text-align: center;
+                padding: 10px 12px;
+                font-size: 13px;
+            }
+            .top-bar-actions form { flex: 1; }
+            .top-bar-actions form .upload-btn { width: 100%; }
+
+            /* Info grid: 2 columns */
+            .info-grid {
+                grid-template-columns: repeat(2, 1fr);
+                gap: 8px;
+            }
+            .info-card { padding: 12px; }
+            .info-card .value { font-size: 14px; }
+
+            /* Period date inputs stack */
+            .period-inputs {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 4px;
+            }
+            .date-input { width: 100%; }
+
+            /* Summary: 2 columns grid */
+            .summary {
+                display: grid;
+                grid-template-columns: repeat(2, 1fr);
+                gap: 8px;
+            }
+            .summary-card {
+                min-width: unset;
+                padding: 14px 10px;
+            }
+            .summary-card .amount { font-size: 16px; }
+            .summary-card .label { font-size: 11px; }
+
+            /* Filter summary: 2 columns */
+            .filter-summary {
+                display: grid;
+                grid-template-columns: repeat(2, 1fr);
+                gap: 8px;
+            }
+            .filter-summary.visible {
+                display: grid;
+            }
+            .filter-summary-card {
+                min-width: unset;
+                padding: 10px;
+            }
+            .filter-summary-card .fs-amount { font-size: 15px; }
+
+            /* Table: card layout on mobile */
+            .table-wrap { border-radius: 8px; overflow-x: auto; }
+            table { font-size: 12px; min-width: 900px; }
+            th { padding: 8px 10px; font-size: 10px; }
+            td { padding: 8px 10px; }
+            .desc { max-width: 200px; }
+            .comment-input { min-width: 100px; font-size: 12px; padding: 4px 6px; }
+            .tags-cell { min-width: 140px; }
+
+            /* Modal */
+            .modal { width: 95vw; max-height: 85vh; }
+            .modal-header { padding: 16px 16px 12px; }
+            .modal-body { padding: 12px 16px 16px; }
+            .hi-meta { flex-direction: column; gap: 2px; }
+
+            /* Filter bar */
+            .filter-bar { padding: 10px 12px; gap: 8px; }
+
+            /* Empty state */
+            .empty-state { padding: 40px 16px; }
+        }
+
+        @media (max-width: 480px) {
+            body { padding: 8px; }
+            .top-bar h1 { font-size: 16px; }
+            .top-bar .subtitle { font-size: 12px; }
+
+            /* Info grid: single column */
+            .info-grid {
+                grid-template-columns: 1fr;
+            }
+
+            /* Summary: single column */
+            .summary {
+                grid-template-columns: 1fr;
+            }
+
+            /* Filter summary: single column */
+            .filter-summary, .filter-summary.visible {
+                grid-template-columns: 1fr;
+            }
+
+            .top-bar-actions {
+                flex-direction: column;
+                gap: 8px;
+            }
+            .top-bar-actions .history-btn,
+            .top-bar-actions .upload-btn {
+                font-size: 13px;
+                padding: 10px;
+            }
+        }
     </style>
 </head>
 <body>
